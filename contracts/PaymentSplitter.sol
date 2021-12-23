@@ -7,8 +7,6 @@ import "./interfaces/IERC20.sol";
 import "./libraries/Address.sol";
 import "./libraries/SafeERC20.sol";
 
-import "./types/Context.sol";
-
 /**
  * @title PaymentSplitter
  * @dev This contract allows to split Ether payments among a group of accounts. The sender does not need to be aware
@@ -26,7 +24,7 @@ import "./types/Context.sol";
  * tokens that apply fees during transfers, are likely to not be supported as expected. If in doubt, we encourage you
  * to run tests before sending real value to this contract.
  */
-contract PaymentSplitter is Context {
+contract PaymentSplitter {
     event PayeeAdded(address account, uint256 shares);
     event PaymentReleased(address to, uint256 amount);
     event ERC20PaymentReleased(
@@ -75,7 +73,7 @@ contract PaymentSplitter is Context {
      * functions].
      */
     receive() external payable virtual {
-        emit PaymentReceived(_msgSender(), msg.value);
+        emit PaymentReceived(msg.sender, msg.value);
     }
 
     /**
@@ -153,6 +151,7 @@ contract PaymentSplitter is Context {
         _totalReleased += payment;
 
         Address.sendValue(account, payment);
+
         emit PaymentReleased(account, payment);
     }
 

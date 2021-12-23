@@ -2,9 +2,7 @@
 
 pragma solidity ^0.8.0;
 
-import "./Context.sol";
-
-contract Ownable is Context {
+contract Ownable {
     address private _owner;
 
     event OwnershipTransferred(
@@ -16,9 +14,8 @@ contract Ownable is Context {
      * @dev Initializes the contract setting the deployer as the initial owner.
      */
     constructor() {
-        address msgSender = _msgSender();
-        _owner = msgSender;
-        emit OwnershipTransferred(address(0), msgSender);
+        _owner = msg.sender;
+        emit OwnershipTransferred(address(0), msg.sender);
     }
 
     /**
@@ -32,7 +29,7 @@ contract Ownable is Context {
      * @dev Throws if called by any account other than the owner.
      */
     modifier onlyOwner() {
-        require(_owner == _msgSender(), "Ownable: caller is not the owner");
+        require(_owner == msg.sender, "Ownable: caller is not the owner");
         _;
     }
 

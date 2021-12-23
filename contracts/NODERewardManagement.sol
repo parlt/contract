@@ -3,223 +3,149 @@
 pragma solidity ^0.8.0;
 
 import "./libraries/SafeMath.sol";
-import "./libraries/IterableMapping.sol";
 
 contract NODERewardManagement {
     using SafeMath for uint256;
-    using IterableMapping for IterableMapping.Map;
 
     struct NodeEntity {
-        string name;
         uint256 creationTime;
         uint256 lastClaimTime;
-        uint256 rewardAvailable;
+		uint256 dividendsPaid;
+		uint256 expireTime;
+        uint256 rewardsPerMinute;
     }
 
-    IterableMapping.Map private nodeOwners;
     mapping(address => NodeEntity[]) private _nodesOfUser;
+	mapping(address => bool) public _managers;
 
     uint256 public nodePrice;
-    uint256 public rewardPerNode;
-    uint256 public claimTime;
 
-    bool public autoDistri = true;
+	uint256 public rewardsPerMinuteOne;
+	uint256 public rewardsPerMinuteFive;
+	uint256 public rewardsPerMinuteTen;
+
     bool public distribution = false;
-
-    uint256 public gasForDistribution = 300000;
-    uint256 public lastDistributionCount = 0;
-    uint256 public lastIndexProcessed = 0;
 
     uint256 public totalNodesCreated = 0;
     uint256 public totalRewardStaked = 0;
 
+	uint256 public claimInterval = 60;
+	
+	uint256 public stakeNodeStartAmount = 0 * 10 ** 18;
+	uint256 public nodeStartAmount = 1 * 10 ** 18;
+	
+	event NodeCreated(address indexed from, string name, uint256 index, uint256 totalNodesCreated, uint256 _type);
+	
     constructor(
         uint256 _nodePrice,
-        uint256 _rewardPerNode,
-        uint256 _claimTime
+        uint256 _rewardsPerMinuteOne,
+        uint256 _rewardsPerMinuteFive,
+        uint256 _rewardsPerMinuteTen
     ) {
+		_managers[msg.sender] = true;
         nodePrice = _nodePrice;
-        rewardPerNode = _rewardPerNode;
-        claimTime = _claimTime;
+        rewardsPerMinuteOne = _rewardsPerMinuteOne;
+        rewardsPerMinuteFive = _rewardsPerMinuteFive;
+        rewardsPerMinuteTen = _rewardsPerMinuteTen;
     }
 
-    function distributeRewards(uint256 gas, uint256 rewardNode)
-        private
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        distribution = true;
-        uint256 numberOfnodeOwners = nodeOwners.keys.length;
-        require(numberOfnodeOwners > 0, "DISTRI REWARDS: NO NODE OWNERS");
-        if (numberOfnodeOwners == 0) {
-            return (0, 0, lastIndexProcessed);
-        }
-
-        uint256 gasUsed = 0;
-        uint256 gasLeft = gasleft();
-        uint256 newGasLeft;
-        uint256 localLastIndex = lastIndexProcessed;
-        uint256 iterations = 0;
-        uint256 newClaimTime = block.timestamp;
-        uint256 nodesCount;
-        uint256 claims = 0;
-        NodeEntity[] storage nodes;
-        NodeEntity storage _node;
-
-        while (gasUsed < gas && iterations < numberOfnodeOwners) {
-            localLastIndex++;
-            if (localLastIndex >= nodeOwners.keys.length) {
-                localLastIndex = 0;
-            }
-            nodes = _nodesOfUser[nodeOwners.keys[localLastIndex]];
-            nodesCount = nodes.length;
-            for (uint256 i = 0; i < nodesCount; i++) {
-                _node = nodes[i];
-                if (claimable(_node)) {
-                    _node.rewardAvailable += rewardNode;
-                    _node.lastClaimTime = newClaimTime;
-                    totalRewardStaked += rewardNode;
-                    claims++;
-                }
-            }
-            iterations++;
-
-            newGasLeft = gasleft();
-
-            if (gasLeft > newGasLeft) {
-                gasUsed = gasUsed.add(gasLeft.sub(newGasLeft));
-            }
-
-            gasLeft = newGasLeft;
-        }
-        lastIndexProcessed = localLastIndex;
-        distribution = false;
-        return (iterations, claims, lastIndexProcessed);
+    modifier onlyManager() {
+        require(_managers[msg.sender] == true, "Only managers can call this function");
+        _;
     }
+	
+	function addManager(address manager) external onlyManager {
+		_managers[manager] = true;
+	}
 
-    function createNode(address account, string memory nodeName) external {
-        require(
-            isNameAvailable(account, nodeName),
-            "CREATE NODE: Name not available"
-        );
+    function createNode(address account, string memory name, uint256 expireTime, uint256 _type) external onlyManager {
+		uint256 realExpireTime = 0;
+		if (expireTime > 0) {
+			realExpireTime = block.timestamp + expireTime;
+		}
+        uint256 rewardsPerMinute;
+        if (_type == 1) {
+            rewardsPerMinute = rewardsPerMinuteOne;
+        } else if (_type == 2) {
+            rewardsPerMinute = rewardsPerMinuteFive;
+        } else if (_type == 3) {
+            rewardsPerMinute = rewardsPerMinuteTen;
+        }
         _nodesOfUser[account].push(
             NodeEntity({
-                name: nodeName,
                 creationTime: block.timestamp,
                 lastClaimTime: block.timestamp,
-                rewardAvailable: rewardPerNode
+				dividendsPaid: 0,
+				expireTime: realExpireTime,
+                rewardsPerMinute: rewardsPerMinute
             })
         );
-        nodeOwners.set(account, _nodesOfUser[account].length);
         totalNodesCreated++;
-        if (autoDistri && !distribution) {
-            distributeRewards(gasForDistribution, rewardPerNode);
-        }
+		emit NodeCreated(account, name, _nodesOfUser[account].length, totalNodesCreated, _type);
     }
+	
+	function dividendsOwing(NodeEntity memory node) private view returns (uint256 availableRewards) {
+		uint256 currentTime = block.timestamp;
+		if (currentTime > node.expireTime && node.expireTime > 0) {
+			currentTime = node.expireTime;
+		}
+		uint256 minutesPassed = (currentTime).sub(node.creationTime).div(claimInterval);
+		return minutesPassed.mul(node.rewardsPerMinute).add(node.expireTime > 0 ? stakeNodeStartAmount : nodeStartAmount).sub(node.dividendsPaid);
+	}
+	
+	function _checkExpired(NodeEntity memory node) private view returns (bool isExpired) {
+		return (node.expireTime > 0 && node.expireTime <= block.timestamp);
+	}
 
-    function isNameAvailable(address account, string memory nodeName)
-        private
-        view
-        returns (bool)
-    {
-        NodeEntity[] memory nodes = _nodesOfUser[account];
-        for (uint256 i = 0; i < nodes.length; i++) {
-            if (keccak256(bytes(nodes[i].name)) == keccak256(bytes(nodeName))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    function _burn(uint256 index) internal {
-        require(index < nodeOwners.size());
-        nodeOwners.remove(nodeOwners.getKeyAtIndex(index));
-    }
-
-    function _addReward(address account, uint256 amount) external {
-        //add last reward node ?
-    }
-
-    function _getNodeWithCreatime(
+    function _getNodeByIndex(
         NodeEntity[] storage nodes,
-        uint256 _creationTime
+        uint256 index
     ) private view returns (NodeEntity storage) {
         uint256 numberOfNodes = nodes.length;
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
-        bool found = false;
-        int256 index = binary_search(nodes, 0, numberOfNodes, _creationTime);
-        uint256 validIndex;
-        if (index >= 0) {
-            found = true;
-            validIndex = uint256(index);
-        }
-        require(found, "NODE SEARCH: No NODE Found with this blocktime");
-        return nodes[validIndex];
+        require(index < numberOfNodes, "CASHOUT ERROR: Invalid node");
+        return nodes[index];
     }
 
-    function binary_search(
-        NodeEntity[] memory arr,
-        uint256 low,
-        uint256 high,
-        uint256 x
-    ) private view returns (int256) {
-        if (high >= low) {
-            uint256 mid = (high + low).div(2);
-            if (arr[mid].creationTime == x) {
-                return int256(mid);
-            } else if (arr[mid].creationTime > x) {
-                return binary_search(arr, low, mid - 1, x);
-            } else {
-                return binary_search(arr, mid + 1, high, x);
-            }
-        } else {
-            return -1;
-        }
-    }
-
-    function _cashoutNodeReward(address account, uint256 _creationTime)
+    function _cashoutNodeReward(address account, uint256 index)
         external
+		onlyManager
         returns (uint256)
     {
-        require(_creationTime > 0, "NODE: CREATIME must be higher than zero");
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 numberOfNodes = nodes.length;
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
-        NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
-        uint256 rewardNode = node.rewardAvailable;
-        node.rewardAvailable = 0;
+        NodeEntity storage node = _getNodeByIndex(nodes, index);
+        uint256 rewardNode = dividendsOwing(node);
+        node.dividendsPaid += rewardNode;
         return rewardNode;
     }
 
     function _cashoutAllNodesReward(address account)
         external
+		onlyManager
         returns (uint256)
     {
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
-        require(nodesCount > 0, "NODE: CREATIME must be higher than zero");
+        require(nodesCount > 0, "NODE: NO NODE OWNER");
         NodeEntity storage _node;
         uint256 rewardsTotal = 0;
         for (uint256 i = 0; i < nodesCount; i++) {
             _node = nodes[i];
-            rewardsTotal += _node.rewardAvailable;
-            _node.rewardAvailable = 0;
+			uint256 rewardNode = dividendsOwing(_node);
+            rewardsTotal += rewardNode;
+            _node.dividendsPaid += rewardNode;
         }
         return rewardsTotal;
     }
 
-    function claimable(NodeEntity memory node) private view returns (bool) {
-        return node.lastClaimTime + claimTime <= block.timestamp;
-    }
 
     function _getRewardAmountOf(address account)
         external
@@ -233,59 +159,67 @@ contract NODERewardManagement {
         NodeEntity[] storage nodes = _nodesOfUser[account];
         nodesCount = nodes.length;
 
+		NodeEntity storage _node;
         for (uint256 i = 0; i < nodesCount; i++) {
-            rewardCount += nodes[i].rewardAvailable;
+			_node = nodes[i];
+            rewardCount += dividendsOwing(_node);
         }
 
         return rewardCount;
     }
 
-    function _getRewardAmountOf(address account, uint256 _creationTime)
+    function _getRewardAmountOf(address account, uint256 index)
         external
         view
         returns (uint256)
     {
         require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
-
-        require(_creationTime > 0, "NODE: CREATIME must be higher than zero");
         NodeEntity[] storage nodes = _nodesOfUser[account];
         uint256 numberOfNodes = nodes.length;
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
         );
-        NodeEntity storage node = _getNodeWithCreatime(nodes, _creationTime);
-        uint256 rewardNode = node.rewardAvailable;
+        NodeEntity storage node = _getNodeByIndex(nodes, index);
+        uint256 rewardNode = dividendsOwing(node);
         return rewardNode;
     }
 
-    function _getNodeRewardAmountOf(address account, uint256 creationTime)
+    function _getNodeRewardAmountOf(address account, uint256 index)
         external
         view
         returns (uint256)
     {
-        return
-            _getNodeWithCreatime(_nodesOfUser[account], creationTime)
-                .rewardAvailable;
+		NodeEntity memory node = _getNodeByIndex(_nodesOfUser[account], index);
+        return dividendsOwing(node);
     }
+	
 
-    function _getNodesNames(address account)
+    function _getNodesExpireTime(address account)
         external
         view
         returns (string memory)
     {
-        require(isNodeOwner(account), "GET NAMES: NO NODE OWNER");
+        require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
-        string memory names = nodes[0].name;
+        string memory _expireTimes = uint2str(nodes[0].expireTime);
         string memory separator = "#";
+
         for (uint256 i = 1; i < nodesCount; i++) {
             _node = nodes[i];
-            names = string(abi.encodePacked(names, separator, _node.name));
+            _expireTimes = string(
+                abi.encodePacked(
+                    _expireTimes,
+                    separator,
+                    uint2str(_node.expireTime)
+                )
+            );
         }
-        return names;
+        return _expireTimes;
     }
+
 
     function _getNodesCreationTime(address account)
         external
@@ -322,7 +256,7 @@ contract NODERewardManagement {
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
-        string memory _rewardsAvailable = uint2str(nodes[0].rewardAvailable);
+        string memory _rewardsAvailable = uint2str(dividendsOwing(nodes[0]));
         string memory separator = "#";
 
         for (uint256 i = 1; i < nodesCount; i++) {
@@ -332,7 +266,7 @@ contract NODERewardManagement {
                 abi.encodePacked(
                     _rewardsAvailable,
                     separator,
-                    uint2str(_node.rewardAvailable)
+                    uint2str(dividendsOwing(_node))
                 )
             );
         }
@@ -364,6 +298,10 @@ contract NODERewardManagement {
         }
         return _lastClaimTimes;
     }
+	
+	function getNodes(address user) external view returns (NodeEntity[] memory nodes) {
+		return _nodesOfUser[user];
+	}
 
     function uint2str(uint256 _i)
         internal
@@ -391,46 +329,37 @@ contract NODERewardManagement {
         return string(bstr);
     }
 
-    function _changeNodePrice(uint256 newNodePrice) external {
+    function _changeStakeNodeStartAmount(uint256 newStartAmount) external onlyManager {
+        stakeNodeStartAmount = newStartAmount;
+    }
+
+    function _changeNodeStartAmount(uint256 newStartAmount) external onlyManager {
+        nodeStartAmount = newStartAmount;
+    }
+
+    function _changeNodePrice(uint256 newNodePrice) external onlyManager {
         nodePrice = newNodePrice;
     }
 
-    function _changeRewardPerNode(uint256 newPrice) external {
-        rewardPerNode = newPrice;
+    function _changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen) external onlyManager {
+        rewardsPerMinuteOne = newPriceOne;
+        rewardsPerMinuteFive = newPriceFive;
+        rewardsPerMinuteTen = newPriceTen;
     }
-
-    function _changeClaimTime(uint256 newTime) external {
-        claimTime = newTime;
-    }
-
-    function _changeAutoDistri(bool newMode) external {
-        autoDistri = newMode;
-    }
-
-    function _changeGasDistri(uint256 newGasDistri) external {
-        gasForDistribution = newGasDistri;
+	
+	function _changeClaimInterval(uint256 newInterval) external onlyManager {
+        claimInterval = newInterval;
     }
 
     function _getNodeNumberOf(address account) public view returns (uint256) {
-        return nodeOwners.get(account);
+        return _nodesOfUser[account].length;
     }
 
     function isNodeOwner(address account) private view returns (bool) {
-        return nodeOwners.get(account) > 0;
+        return _nodesOfUser[account].length > 0;
     }
 
     function _isNodeOwner(address account) external view returns (bool) {
         return isNodeOwner(account);
-    }
-
-    function _distributeRewards()
-        external
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
-        return distributeRewards(gasForDistribution, rewardPerNode);
     }
 }
