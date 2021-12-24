@@ -70,11 +70,11 @@ contract NODERewardManagement {
 			realExpireTime = block.timestamp + expireTime;
 		}
         uint256 rewardsPerMinute;
-        if (_type == 1) {
+        if (_type == uint256(1)) {
             rewardsPerMinute = rewardsPerMinuteOne;
-        } else if (_type == 2) {
+        } else if (_type == uint256(2)) {
             rewardsPerMinute = rewardsPerMinuteFive;
-        } else if (_type == 3) {
+        } else if (_type == uint256(3)) {
             rewardsPerMinute = rewardsPerMinuteTen;
         }
         _nodesOfUser[account].push(

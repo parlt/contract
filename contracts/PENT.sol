@@ -126,7 +126,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 			_isExcluded[_addresses[i]] = true;
             _mint(_addresses[i], _balances[i] * (10**18));
         }
-        // require(totalSupply() == 20456743e18, "CONSTR: totalSupply must equal 20 million");
+        require(totalSupply() == 20456743e18, "CONSTR: totalSupply must equal 20 million");
         require(swapAmount > 0, "CONSTR: Swap amount incorrect");
         swapTokensAmount = swapAmount * (10**18);
 		
