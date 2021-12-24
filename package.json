@@ -31,5 +31,11 @@
     "ts-node": "^10.4.0",
     "typechain": "^5.2.0",
     "typescript": "^4.5.4"
+  },
+  "scripts": {
+    "compile": "npx hardhat compile --force",
+    "deploy-s:ropsten": "npx hardhat run scripts/deployAll.ts --network ropsten",
+    "deploy:localhost": "npx hardhat run scripts/deployAll.ts --network localhost",
+    "deploy:mumbai": "npx hardhat run scripts/deployAll.ts --network mumbai"
   }
 }

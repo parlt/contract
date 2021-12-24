@@ -18,7 +18,9 @@ contract NODERewardManagement {
     mapping(address => NodeEntity[]) private _nodesOfUser;
 	mapping(address => bool) public _managers;
 
-    uint256 public nodePrice;
+    uint256 public nodePriceOne;
+    uint256 public nodePriceFive;
+    uint256 public nodePriceTen;
 
 	uint256 public rewardsPerMinuteOne;
 	uint256 public rewardsPerMinuteFive;
@@ -37,13 +39,17 @@ contract NODERewardManagement {
 	event NodeCreated(address indexed from, string name, uint256 index, uint256 totalNodesCreated, uint256 _type);
 	
     constructor(
-        uint256 _nodePrice,
+        uint256 _nodePriceOne,
+        uint256 _nodePriceFive,
+        uint256 _nodePriceTen,
         uint256 _rewardsPerMinuteOne,
         uint256 _rewardsPerMinuteFive,
         uint256 _rewardsPerMinuteTen
     ) {
 		_managers[msg.sender] = true;
-        nodePrice = _nodePrice;
+        nodePriceOne = _nodePriceOne;
+        nodePriceFive = _nodePriceFive;
+        nodePriceTen = _nodePriceTen;
         rewardsPerMinuteOne = _rewardsPerMinuteOne;
         rewardsPerMinuteFive = _rewardsPerMinuteFive;
         rewardsPerMinuteTen = _rewardsPerMinuteTen;
@@ -337,8 +343,10 @@ contract NODERewardManagement {
         nodeStartAmount = newStartAmount;
     }
 
-    function _changeNodePrice(uint256 newNodePrice) external onlyManager {
-        nodePrice = newNodePrice;
+    function _changeNodePrice(uint256 newNodePriceOne, uint256 newNodePriceFive, uint256 newNodePriceTen) external onlyManager {
+        nodePriceOne = newNodePriceOne;
+        nodePriceFive = newNodePriceFive;
+        nodePriceTen = newNodePriceTen;
     }
 
     function _changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen) external onlyManager {
@@ -351,7 +359,17 @@ contract NODERewardManagement {
         claimInterval = newInterval;
     }
 
-    function _getNodeNumberOf(address account) public view returns (uint256) {
+    function getNodePrice(uint256 _type) external view returns (uint256) {
+        if (_type == 1) {
+            return nodePriceOne;
+        } else if (_type == 2) {
+            return nodePriceFive;
+        } else if (_type == 3) {
+            return nodePriceTen;
+        }
+    }
+
+    function _getNodeNumberOf(address account) external view returns (uint256) {
         return _nodesOfUser[account].length;
     }
 

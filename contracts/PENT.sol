@@ -4,17 +4,17 @@ pragma solidity ^0.8.0;
 
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IUniswapV2Factory.sol";
+import "./interfaces/INODERewardManagement.sol";
 
 import "./types/ERC20.sol";
 import "./types/Ownable.sol";
 
 import "./PaymentSplitter.sol";
-import "./NODERewardManagement.sol";
 
-contract Comet is ERC20, Ownable, PaymentSplitter {
+contract PENT is ERC20, Ownable, PaymentSplitter {
     using SafeMath for uint256;
 
-    NODERewardManagement public nodeRewardManagement;
+    INODERewardManagement public immutable nodeRewardManagement;
 
     IUniswapV2Router02 public uniswapV2Router;
 	
@@ -83,17 +83,24 @@ contract Comet is ERC20, Ownable, PaymentSplitter {
         uint256[] memory fees,
         uint256 swapAmount,
         address uniV2Router,
-		address nodeManagement
-    ) ERC20("Comet", "COMET") PaymentSplitter(payees, shares) {
-        nodeRewardManagement = NODERewardManagement(nodeManagement);
+        address _nodeRewardManagement
+    ) ERC20("PENT", "PENT") PaymentSplitter(payees, shares) {
+
+        nodeRewardManagement = INODERewardManagement(_nodeRewardManagement);
+
+        require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(uniV2Router);
+
+        address _uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
+            .createPair(address(this), _uniswapV2Router.WETH());
+
+        uniswapV2Router = _uniswapV2Router;
+        uniswapV2Pair = _uniswapV2Pair;
 
         futurUsePool = addresses[4];
         distributionPool = addresses[5];
 
         require(futurUsePool != address(0) && distributionPool != address(0), "FUTUR & REWARD ADDRESS CANNOT BE ZERO");
-
-        require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
-       
 
         require(
             fees[0] != 0 && fees[1] != 0 && fees[2] != 0 && fees[3] != 0,
@@ -112,19 +119,18 @@ contract Comet is ERC20, Ownable, PaymentSplitter {
         require(addresses.length > 0 && balances.length > 0, "CONSTR: addresses array length must be greater than zero");
         require(addresses.length == balances.length, "CONSTR: addresses arrays length mismatch");
 
-        for (uint256 i = 0; i < addresses.length; i++) {
-			_isExcluded[addresses[i]] = true;
-            _mint(addresses[i], balances[i] * (10**18));
+        address[] memory _addresses = addresses; 
+        uint256[] memory _balances = balances;
+
+        for (uint256 i = 0; i < _addresses.length; i++) {
+			_isExcluded[_addresses[i]] = true;
+            _mint(_addresses[i], _balances[i] * (10**18));
         }
-        require(totalSupply() == 20456743e18, "CONSTR: totalSupply must equal 20 million");
+        // require(totalSupply() == 20456743e18, "CONSTR: totalSupply must equal 20 million");
         require(swapAmount > 0, "CONSTR: Swap amount incorrect");
         swapTokensAmount = swapAmount * (10**18);
 		
 		protectSale = true;
-    }
-	
-	function setNodeManagement(address nodeManagement) external onlyOwner {
-        nodeRewardManagement = NODERewardManagement(nodeManagement);
     }
 
     function updateUniswapV2Router(address newAddress) public onlyOwner {
@@ -332,7 +338,7 @@ contract Comet is ERC20, Ownable, PaymentSplitter {
         
 		require(sender != futurUsePool && sender != distributionPool, "NODE CREATION: futur and rewardsPool cannot create node");
         
-		uint256 nodePrice = nodeRewardManagement.nodePrice();
+		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type);
 		require(balanceOf(sender) >= nodePrice, "NODE CREATION: Balance too low for creation.");
         uint256 contractTokenBalance = balanceOf(address(this));
         bool swapAmountOk = contractTokenBalance >= swapTokensAmount;
@@ -385,7 +391,7 @@ contract Comet is ERC20, Ownable, PaymentSplitter {
 		uint256 duration = stakeDays * 1 days;
 		uint256 nodeFee = nodeFees[stakeDays - 1];
 		
-		uint256 nodePrice = nodeRewardManagement.nodePrice();
+		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type);
 		require(balanceOf(sender) >= nodePrice + nodeFee, "NODE CREATION: Balance too low for creation.");
         uint256 contractTokenBalance = balanceOf(address(this));
 		
@@ -434,10 +440,7 @@ contract Comet is ERC20, Ownable, PaymentSplitter {
             sender != futurUsePool && sender != distributionPool,
             "CSHT: futur and rewardsPool cannot cashout rewards"
         );
-        uint256 rewardAmount = nodeRewardManagement._getRewardAmountOf(
-            sender,
-            blocktime
-        );
+        uint256 rewardAmount = nodeRewardManagement._getRewardAmountOf( sender, blocktime );
         require(
             rewardAmount > 0,
             "CSHT: You don't have enough reward to cash out"
@@ -512,12 +515,12 @@ contract Comet is ERC20, Ownable, PaymentSplitter {
 		nodeFees = newNodeFees;
 	}
 
-    function changeNodePrice(uint256 newNodePrice) public onlyOwner {
-        nodeRewardManagement._changeNodePrice(newNodePrice);
+    function changeNodePrices(uint256 newNodePriceOne, uint256 newNodePriceFive, uint256 newNodePriceTen) public onlyOwner {
+        nodeRewardManagement._changeNodePrice(newNodePriceOne, newNodePriceFive, newNodePriceTen);
     }
 
-    function getNodePrice() public view returns (uint256) {
-        return nodeRewardManagement.nodePrice();
+    function getNodePrice(uint256 _type) public view returns (uint256) {
+        return nodeRewardManagement.getNodePrice(_type);
     }
 	
     function changeClaimInterval(uint256 newInterval) public onlyOwner {
