@@ -326,12 +326,12 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		super._transfer(stakingPool, msg.sender, amount);
 		
 	}
-	
+
     function createNodeWithTokens(string memory name, uint256 _type) public {
         require(bytes(name).length > 3 && bytes(name).length < 20, "NODE CREATION: NAME SIZE INVALID");
         
 		address sender = msg.sender;
-       
+
 	    require(sender != address(0), "NODE CREATION:  creation from the zero address");
        
 	    require(!_isBlacklisted[sender], "NODE CREATION: Blacklisted address");
@@ -537,6 +537,15 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 
     function getRewardsPerMinute() public view returns (uint256, uint256, uint256) {
         return (nodeRewardManagement.rewardsPerMinuteOne(), nodeRewardManagement.rewardsPerMinuteFive(), nodeRewardManagement.rewardsPerMinuteTen() );
+    }
+
+    function getNodesName() public view returns (string memory) {
+        require(msg.sender != address(0), "SENDER CAN'T BE ZERO");
+        require(
+            nodeRewardManagement._isNodeOwner(msg.sender),
+            "NO NODE OWNER"
+        );
+        return nodeRewardManagement._getNodesName(msg.sender);
     }
 
     function getNodesCreatime() public view returns (string memory) {

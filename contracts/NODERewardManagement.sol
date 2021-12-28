@@ -13,6 +13,7 @@ contract NODERewardManagement {
 		uint256 dividendsPaid;
 		uint256 expireTime;
         uint256 rewardsPerMinute;
+        string name;
     }
 
     mapping(address => NodeEntity[]) private _nodesOfUser;
@@ -83,7 +84,8 @@ contract NODERewardManagement {
                 lastClaimTime: block.timestamp,
 				dividendsPaid: 0,
 				expireTime: realExpireTime,
-                rewardsPerMinute: rewardsPerMinute
+                rewardsPerMinute: rewardsPerMinute,
+                name: name
             })
         );
         totalNodesCreated++;
@@ -130,6 +132,7 @@ contract NODERewardManagement {
         NodeEntity storage node = _getNodeByIndex(nodes, index);
         uint256 rewardNode = dividendsOwing(node);
         node.dividendsPaid += rewardNode;
+        node.lastClaimTime = block.timestamp;
         return rewardNode;
     }
 
@@ -148,6 +151,7 @@ contract NODERewardManagement {
 			uint256 rewardNode = dividendsOwing(_node);
             rewardsTotal += rewardNode;
             _node.dividendsPaid += rewardNode;
+            _node.lastClaimTime = block.timestamp;
         }
         return rewardsTotal;
     }
@@ -224,6 +228,33 @@ contract NODERewardManagement {
             );
         }
         return _expireTimes;
+    }
+
+
+    function _getNodesName(address account)
+        external
+        view
+        returns (string memory)
+    {
+        require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
+        NodeEntity[] memory nodes = _nodesOfUser[account];
+        uint256 nodesCount = nodes.length;
+        NodeEntity memory _node;
+        string memory _names = nodes[0].name;
+        string memory separator = "#";
+
+        for (uint256 i = 1; i < nodesCount; i++) {
+            _node = nodes[i];
+
+            _names = string(
+                abi.encodePacked(
+                    _names,
+                    separator,
+                    _node.name
+                )
+            );
+        }
+        return _names;
     }
 
 
