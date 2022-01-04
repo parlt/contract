@@ -6,7 +6,7 @@ pragma solidity ^0.8.0;
  * @dev Interface of the ERC20 standard as defined in the EIP.
  */
 interface INODERewardManagement {
-    function getNodePrice(uint256 _type) external view returns (uint256);
+    function getNodePrice(uint256 _type, bool isFusion) external view returns (uint256);
 
     function createNode(address account, string memory name, uint256 expireTime, uint256 _type) external;
     
@@ -28,7 +28,7 @@ interface INODERewardManagement {
 
     function claimInterval() external view returns (uint256);
 
-    function _changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen) external;
+    function _changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen, uint256 newPriceOMEGA) external;
 
     function rewardsPerMinuteOne() external view returns (uint256);
 
@@ -49,4 +49,13 @@ interface INODERewardManagement {
     function totalRewardStaked() external view returns (uint256);
 
     function totalNodesCreated() external view returns (uint256);
+
+    // Fusion
+    function toggleFusionMode() external;
+
+    function setNodeCountForFusion(uint256 _nodeCountForLesser, uint256 _nodeCountForCommon, uint256 _nodeCountForLegendary) external;
+
+    function setTaxForFusion(uint256 _taxForLesser, uint256 _taxForCommon, uint256 _taxForLegendary) external;
+
+    function fusionNode(uint256 _method, address _account) external;
 }

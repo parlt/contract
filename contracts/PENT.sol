@@ -326,7 +326,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		
 	}
 
-    function createNodeWithTokens(string memory name, uint256 _type) public {
+    function createNodeWithTokens(string memory name, uint256 _type, bool isFusion) public {
         require(bytes(name).length > 3 && bytes(name).length < 20, "NODE CREATION: NAME SIZE INVALID");
         
 		address sender = msg.sender;
@@ -337,7 +337,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         
 		require(sender != futurUsePool && sender != distributionPool, "NODE CREATION: futur and rewardsPool cannot create node");
         
-		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type);
+		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type, isFusion);
 		require(balanceOf(sender) >= nodePrice, "NODE CREATION: Balance too low for creation.");
         uint256 contractTokenBalance = balanceOf(address(this));
         bool swapAmountOk = contractTokenBalance >= swapTokensAmount;
@@ -375,7 +375,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         nodeRewardManagement.createNode(sender, name, 0, _type);
     }
 
-	function createNodeWithStakePosition(string memory name, uint256 stakeDays, uint256 _type) public {
+	function createNodeWithStakePosition(string memory name, uint256 stakeDays, uint256 _type, bool isFusion) public {
         require(bytes(name).length > 3 && bytes(name).length < 32, "NODE CREATION: NAME SIZE INVALID");
         
 		address sender = msg.sender;
@@ -390,7 +390,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		uint256 duration = stakeDays * 1 days;
 		uint256 nodeFee = nodeFees[stakeDays - 1];
 		
-		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type);
+		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type, isFusion);
 		require(balanceOf(sender) >= nodePrice + nodeFee, "NODE CREATION: Balance too low for creation.");
         uint256 contractTokenBalance = balanceOf(address(this));
 		
@@ -518,8 +518,8 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         nodeRewardManagement._changeNodePrice(newNodePriceOne, newNodePriceFive, newNodePriceTen);
     }
 
-    function getNodePrice(uint256 _type) public view returns (uint256) {
-        return nodeRewardManagement.getNodePrice(_type);
+    function getNodePrice(uint256 _type, bool isFusion) public view returns (uint256) {
+        return nodeRewardManagement.getNodePrice(_type, isFusion);
     }
 
     function changeClaimInterval(uint256 newInterval) public onlyOwner {
@@ -530,8 +530,8 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         return nodeRewardManagement.claimInterval();
     }
 
-    function changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen) public onlyOwner {
-        nodeRewardManagement._changeRewardsPerMinute(newPriceOne, newPriceFive, newPriceTen);
+    function changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen, uint256 newPriceOMEGA) public onlyOwner {
+        nodeRewardManagement._changeRewardsPerMinute(newPriceOne, newPriceFive, newPriceTen, newPriceOMEGA);
     }
 
     function getRewardsPerMinute() public view returns (uint256, uint256, uint256) {
@@ -600,4 +600,22 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		if (amount > address(this).balance) amount = address(this).balance;
 		payable(owner()).transfer(amount);
 	}
+
+    // Fusion Node
+    function toggleFusionMode() public {
+        nodeRewardManagement.toggleFusionMode();
+    }
+
+    function setNodeCountForFusion(uint256 _nodeCountForLesser, uint256 _nodeCountForCommon, uint256 _nodeCountForLegendary) public onlyOwner {
+        nodeRewardManagement.setNodeCountForFusion(_nodeCountForLesser, _nodeCountForCommon, _nodeCountForLegendary);
+    }
+
+    function setTaxForFusion(uint256 _taxForLesser, uint256 _taxForCommon, uint256 _taxForLegendary) public onlyOwner {
+        nodeRewardManagement.setTaxForFusion(_taxForLesser, _taxForCommon, _taxForLegendary);
+    }
+
+    function fusionNode(uint256 _method, address _account, string memory name) public {
+        nodeRewardManagement.fusionNode(_method, _account);
+        createNodeWithTokens(name, _method.add(1), true);
+    }
 }

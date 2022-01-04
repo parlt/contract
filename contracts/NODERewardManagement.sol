@@ -14,6 +14,7 @@ contract NODERewardManagement {
 		uint256 expireTime;
         uint256 rewardsPerMinute;
         string name;
+        uint256 nodeType;
     }
 
     mapping(address => NodeEntity[]) private _nodesOfUser;
@@ -26,6 +27,7 @@ contract NODERewardManagement {
 	uint256 public rewardsPerMinuteOne;
 	uint256 public rewardsPerMinuteFive;
 	uint256 public rewardsPerMinuteTen;
+    uint256 public rewardsPerMinuteOMEGA;
 
     bool public distribution = false;
 
@@ -39,13 +41,30 @@ contract NODERewardManagement {
 
 	event NodeCreated(address indexed from, string name, uint256 index, uint256 totalNodesCreated, uint256 _type);
 
+    // Fusion
+    mapping(address => uint256) public lesserNodes;
+    mapping(address => uint256) public commonNodes;
+    mapping(address => uint256) public legendaryNodes;
+    mapping(address => bool) public omegaOwner;
+
+    uint256 public nodeCountForLesser = 6;
+    uint256 public nodeCountForCommon = 6;
+    uint256 public nodeCountForLegendary = 6;
+
+    uint256 public taxForLesser = 1;
+    uint256 public taxForCommon = 1;
+    uint256 public taxForLegendary = 1;
+
+    bool public allowFusion = true;
+
     constructor(
         uint256 _nodePriceOne,
         uint256 _nodePriceFive,
         uint256 _nodePriceTen,
         uint256 _rewardsPerMinuteOne,
         uint256 _rewardsPerMinuteFive,
-        uint256 _rewardsPerMinuteTen
+        uint256 _rewardsPerMinuteTen,
+        uint256 _rewardsPerMinuteOMEGA
     ) {
 		_managers[msg.sender] = true;
         nodePriceOne = _nodePriceOne;
@@ -54,6 +73,7 @@ contract NODERewardManagement {
         rewardsPerMinuteOne = _rewardsPerMinuteOne;
         rewardsPerMinuteFive = _rewardsPerMinuteFive;
         rewardsPerMinuteTen = _rewardsPerMinuteTen;
+        rewardsPerMinuteOMEGA = _rewardsPerMinuteOMEGA;
     }
 
     modifier onlyManager() {
@@ -73,10 +93,16 @@ contract NODERewardManagement {
         uint256 rewardsPerMinute;
         if (_type == uint256(1)) {
             rewardsPerMinute = rewardsPerMinuteOne;
+            lesserNodes[account] = lesserNodes[account].add(1);
         } else if (_type == uint256(2)) {
             rewardsPerMinute = rewardsPerMinuteFive;
+            commonNodes[account] = commonNodes[account].add(1);
         } else if (_type == uint256(3)) {
             rewardsPerMinute = rewardsPerMinuteTen;
+            legendaryNodes[account] = legendaryNodes[account].add(1);
+        } else if (_type == uint256(4)) {
+            rewardsPerMinute = rewardsPerMinuteOMEGA;
+            omegaOwner[account] = true;
         }
         _nodesOfUser[account].push(
             NodeEntity({
@@ -85,7 +111,8 @@ contract NODERewardManagement {
 				dividendsPaid: 0,
 				expireTime: realExpireTime,
                 rewardsPerMinute: rewardsPerMinute,
-                name: name
+                name: name,
+                nodeType: _type
             })
         );
         totalNodesCreated++;
@@ -376,23 +403,36 @@ contract NODERewardManagement {
         nodePriceTen = newNodePriceTen;
     }
 
-    function _changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen) external onlyManager {
+    function _changeRewardsPerMinute(uint256 newPriceOne, uint256 newPriceFive, uint256 newPriceTen, uint256 newPriceOMEGA) external onlyManager {
         rewardsPerMinuteOne = newPriceOne;
         rewardsPerMinuteFive = newPriceFive;
         rewardsPerMinuteTen = newPriceTen;
+        rewardsPerMinuteOMEGA = newPriceOMEGA;
     }
 
 	function _changeClaimInterval(uint256 newInterval) external onlyManager {
         claimInterval = newInterval;
     }
 
-    function getNodePrice(uint256 _type) external view returns (uint256) {
+    function getNodePrice(uint256 _type, bool isFusion) external view returns (uint256 returnValue) {
         if (_type == 1) {
-            return nodePriceOne;
+            if (isFusion) {
+                returnValue = taxForLesser;
+            } else {
+                returnValue = nodePriceOne;
+            }
         } else if (_type == 2) {
-            return nodePriceFive;
+            if (isFusion) {
+                returnValue = taxForCommon;
+            } else {
+                returnValue = nodePriceFive;
+            }
         } else if (_type == 3) {
-            return nodePriceTen;
+            if (isFusion) {
+                returnValue = taxForLegendary;
+            } else {
+                returnValue = nodePriceTen;
+            }
         }
     }
 
@@ -406,5 +446,65 @@ contract NODERewardManagement {
 
     function _isNodeOwner(address account) external view returns (bool) {
         return isNodeOwner(account);
+    }
+
+    // Fusion
+    function toggleFusionMode() external onlyManager {
+        allowFusion = !allowFusion;
+    }
+
+    function setNodeCountForFusion(uint256 _nodeCountForLesser, uint256 _nodeCountForCommon, uint256 _nodeCountForLegendary) external onlyManager {
+        nodeCountForLesser = _nodeCountForLesser;
+        nodeCountForCommon = _nodeCountForCommon;
+        nodeCountForLegendary = _nodeCountForLegendary;
+    }
+
+    function setTaxForFusion(uint256 _taxForLesser, uint256 _taxForCommon, uint256 _taxForLegendary) external onlyManager {
+        taxForLesser = _taxForLesser;
+        taxForCommon = _taxForCommon;
+        taxForLegendary = _taxForLegendary;
+    }
+
+    function fusionNode(uint256 _method, address account) external view {
+        require(isNodeOwner(account), "Fusion: NO NODE OWNER");
+        require(allowFusion, "Fusion: Not Allowed to Fuse");
+
+        uint256 nodeCountForFusion;
+
+        if (_method == 1) {
+            require(lesserNodes[account] >= nodeCountForLesser, "Fusion: Not enough Lesser Nodes");
+            nodeCountForFusion = nodeCountForLesser;
+        } else if (_method == 2) {
+            require(commonNodes[account] >= nodeCountForCommon, "Fusion: Not enough Common Nodes");
+            nodeCountForFusion = nodeCountForCommon;
+        } else if (_method == 3) {
+            require(legendaryNodes[account] >= nodeCountForLegendary, "Fusion: Not enough Legendary Nodes");
+            require(!omegaOwner[account], "Fusion: Already has OMEGA Node");
+            nodeCountForFusion = nodeCountForLegendary;
+        }
+
+        NodeEntity[] memory nodes = _nodesOfUser[account];
+
+        NodeEntity memory _node;
+
+        uint256 count = 0;
+
+        for (uint256 i = 1; i < nodes.length; i++) {
+            _node = nodes[i];
+
+            if (_node.nodeType != _method) {
+                continue;
+            }
+
+            count++;
+            nodes[i] = nodes[nodes.length - 1];
+            delete nodes[nodes.length - 1];
+
+            // _nodesOfUser[account] = nodes;
+
+            if (count == nodeCountForFusion) {
+                break;
+            }
+        }
     }
 }
