@@ -33,12 +33,12 @@ contract NODERewardManagement {
     uint256 public totalRewardStaked = 0;
 
 	uint256 public claimInterval = 60;
-	
+
 	uint256 public stakeNodeStartAmount = 0 * 10 ** 18;
 	uint256 public nodeStartAmount = 1 * 10 ** 18;
-	
+
 	event NodeCreated(address indexed from, string name, uint256 index, uint256 totalNodesCreated, uint256 _type);
-	
+
     constructor(
         uint256 _nodePriceOne,
         uint256 _nodePriceFive,
@@ -60,7 +60,7 @@ contract NODERewardManagement {
         require(_managers[msg.sender] == true, "Only managers can call this function");
         _;
     }
-	
+
 	function addManager(address manager) external onlyManager {
 		_managers[manager] = true;
 	}
@@ -91,7 +91,7 @@ contract NODERewardManagement {
         totalNodesCreated++;
 		emit NodeCreated(account, name, _nodesOfUser[account].length, totalNodesCreated, _type);
     }
-	
+
 	function dividendsOwing(NodeEntity memory node) private view returns (uint256 availableRewards) {
 		uint256 currentTime = block.timestamp;
 		if (currentTime > node.expireTime && node.expireTime > 0) {
@@ -100,7 +100,7 @@ contract NODERewardManagement {
 		uint256 minutesPassed = (currentTime).sub(node.creationTime).div(claimInterval);
 		return minutesPassed.mul(node.rewardsPerMinute).add(node.expireTime > 0 ? stakeNodeStartAmount : nodeStartAmount).sub(node.dividendsPaid);
 	}
-	
+
 	function _checkExpired(NodeEntity memory node) private view returns (bool isExpired) {
 		return (node.expireTime > 0 && node.expireTime <= block.timestamp);
 	}
@@ -156,7 +156,6 @@ contract NODERewardManagement {
         return rewardsTotal;
     }
 
-
     function _getRewardAmountOf(address account)
         external
         view
@@ -203,7 +202,6 @@ contract NODERewardManagement {
 		NodeEntity memory node = _getNodeByIndex(_nodesOfUser[account], index);
         return dividendsOwing(node);
     }
-	
 
     function _getNodesExpireTime(address account)
         external
@@ -230,7 +228,6 @@ contract NODERewardManagement {
         return _expireTimes;
     }
 
-
     function _getNodesName(address account)
         external
         view
@@ -256,7 +253,6 @@ contract NODERewardManagement {
         }
         return _names;
     }
-
 
     function _getNodesCreationTime(address account)
         external
@@ -335,7 +331,7 @@ contract NODERewardManagement {
         }
         return _lastClaimTimes;
     }
-	
+
 	function getNodes(address user) external view returns (NodeEntity[] memory nodes) {
 		return _nodesOfUser[user];
 	}
@@ -385,7 +381,7 @@ contract NODERewardManagement {
         rewardsPerMinuteFive = newPriceFive;
         rewardsPerMinuteTen = newPriceTen;
     }
-	
+
 	function _changeClaimInterval(uint256 newInterval) external onlyManager {
         claimInterval = newInterval;
     }
