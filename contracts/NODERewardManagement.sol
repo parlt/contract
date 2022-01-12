@@ -15,9 +15,11 @@ contract NODERewardManagement {
         uint256 rewardsPerMinute;
         string name;
         uint256 nodeType;
+        bool created;
     }
 
     mapping(address => NodeEntity[]) private _nodesOfUser;
+    mapping(address => uint256) private _nodesCount;
 	mapping(address => bool) public _managers;
 
     uint256 public nodePriceOne;
@@ -47,13 +49,13 @@ contract NODERewardManagement {
     mapping(address => uint256) public legendaryNodes;
     mapping(address => bool) public omegaOwner;
 
-    uint256 public nodeCountForLesser = 6;
-    uint256 public nodeCountForCommon = 6;
-    uint256 public nodeCountForLegendary = 6;
+    uint256 public nodeCountForLesser = 5;
+    uint256 public nodeCountForCommon = 2;
+    uint256 public nodeCountForLegendary = 10;
 
-    uint256 public taxForLesser = 1;
-    uint256 public taxForCommon = 1;
-    uint256 public taxForLegendary = 1;
+    uint256 public taxForLesser;
+    uint256 public taxForCommon;
+    uint256 public taxForLegendary;
 
     bool public allowFusion = true;
 
@@ -112,11 +114,34 @@ contract NODERewardManagement {
 				expireTime: realExpireTime,
                 rewardsPerMinute: rewardsPerMinute,
                 name: name,
-                nodeType: _type
+                nodeType: _type,
+                created: true
             })
         );
         totalNodesCreated++;
+        _nodesCount[account] ++;
+        refreshNodes(account);
 		emit NodeCreated(account, name, _nodesOfUser[account].length, totalNodesCreated, _type);
+    }
+
+    function refreshNodes(address account) private {
+        NodeEntity[] memory nodes = _nodesOfUser[account];
+
+        NodeEntity memory _node;
+
+        for (uint256 i = 0; i < nodes.length; i++) {
+
+            _node = nodes[i];
+
+            if (_node.created == true) {
+                continue;
+            }
+
+            _nodesOfUser[account][i] = _nodesOfUser[account][nodes.length - 1];
+            delete _nodesOfUser[account][nodes.length - 1];
+            totalNodesCreated--;
+            _nodesCount[account]--;
+        }
     }
 
 	function dividendsOwing(NodeEntity memory node) private view returns (uint256 availableRewards) {
@@ -230,7 +255,7 @@ contract NODERewardManagement {
         return dividendsOwing(node);
     }
 
-    function _getNodesExpireTime(address account)
+    function _getNodesType(address account)
         external
         view
         returns (string memory)
@@ -239,20 +264,20 @@ contract NODERewardManagement {
         NodeEntity[] memory nodes = _nodesOfUser[account];
         uint256 nodesCount = nodes.length;
         NodeEntity memory _node;
-        string memory _expireTimes = uint2str(nodes[0].expireTime);
+        string memory _types = uint2str(nodes[0].nodeType);
         string memory separator = "#";
 
         for (uint256 i = 1; i < nodesCount; i++) {
             _node = nodes[i];
-            _expireTimes = string(
+            _types = string(
                 abi.encodePacked(
-                    _expireTimes,
+                    _types,
                     separator,
-                    uint2str(_node.expireTime)
+                    uint2str(_node.nodeType)
                 )
             );
         }
-        return _expireTimes;
+        return _types;
     }
 
     function _getNodesName(address account)
@@ -279,6 +304,31 @@ contract NODERewardManagement {
             );
         }
         return _names;
+    }
+
+    function _getNodesExpireTime(address account)
+        external
+        view
+        returns (string memory)
+    {
+        require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
+        NodeEntity[] memory nodes = _nodesOfUser[account];
+        uint256 nodesCount = nodes.length;
+        NodeEntity memory _node;
+        string memory _expireTimes = uint2str(nodes[0].expireTime);
+        string memory separator = "#";
+
+        for (uint256 i = 1; i < nodesCount; i++) {
+            _node = nodes[i];
+            _expireTimes = string(
+                abi.encodePacked(
+                    _expireTimes,
+                    separator,
+                    uint2str(_node.expireTime)
+                )
+            );
+        }
+        return _expireTimes;
     }
 
     function _getNodesCreationTime(address account)
@@ -415,33 +465,31 @@ contract NODERewardManagement {
     }
 
     function getNodePrice(uint256 _type, bool isFusion) external view returns (uint256 returnValue) {
-        if (_type == 1) {
-            if (isFusion) {
+        if (isFusion) {
+            if (_type == 2) {
                 returnValue = taxForLesser;
-            } else {
-                returnValue = nodePriceOne;
-            }
-        } else if (_type == 2) {
-            if (isFusion) {
+            } else if (_type == 3) {
                 returnValue = taxForCommon;
-            } else {
-                returnValue = nodePriceFive;
-            }
-        } else if (_type == 3) {
-            if (isFusion) {
+            } else if (_type == 4) {
                 returnValue = taxForLegendary;
-            } else {
+            }
+        } else {
+            if (_type == 1) {
+                returnValue = nodePriceOne;
+            } else if (_type == 2) {
+                returnValue = nodePriceFive;
+            } else if (_type == 3) {
                 returnValue = nodePriceTen;
             }
         }
     }
 
     function _getNodeNumberOf(address account) external view returns (uint256) {
-        return _nodesOfUser[account].length;
+        return _nodesCount[account];
     }
 
     function isNodeOwner(address account) private view returns (bool) {
-        return _nodesOfUser[account].length > 0;
+        return _nodesCount[account] > 0;
     }
 
     function _isNodeOwner(address account) external view returns (bool) {
@@ -465,7 +513,7 @@ contract NODERewardManagement {
         taxForLegendary = _taxForLegendary;
     }
 
-    function fusionNode(uint256 _method, address account) external view {
+    function fusionNode(uint256 _method, address account) external {
         require(isNodeOwner(account), "Fusion: NO NODE OWNER");
         require(allowFusion, "Fusion: Not Allowed to Fuse");
 
@@ -489,22 +537,24 @@ contract NODERewardManagement {
 
         uint256 count = 0;
 
-        for (uint256 i = 1; i < nodes.length; i++) {
+        for (uint256 i = 0; i < nodes.length; i++) {
+
+            if (count == nodeCountForFusion) {
+                break;
+            }
+
             _node = nodes[i];
 
             if (_node.nodeType != _method) {
                 continue;
             }
 
+            _nodesOfUser[account][i] = _nodesOfUser[account][nodes.length - 1];
+            delete _nodesOfUser[account][nodes.length - 1];
+            i--;
             count++;
-            nodes[i] = nodes[nodes.length - 1];
-            delete nodes[nodes.length - 1];
-
-            // _nodesOfUser[account] = nodes;
-
-            if (count == nodeCountForFusion) {
-                break;
-            }
+            _nodesCount[account]--;
+            totalNodesCreated--;
         }
     }
 }

@@ -36,6 +36,8 @@ interface INODERewardManagement {
 
     function rewardsPerMinuteTen() external view returns (uint256);
 
+    function _getNodesType(address account) external view returns (string memory);
+
     function _getNodesName(address account) external view returns (string memory);
 
     function _getNodesCreationTime(address account) external view returns (string memory);

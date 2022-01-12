@@ -11,6 +11,8 @@ import "./types/Ownable.sol";
 
 import "./PaymentSplitter.sol";
 
+import "hardhat/console.sol";
+
 contract PENT is ERC20, Ownable, PaymentSplitter {
     using SafeMath for uint256;
 
@@ -84,6 +86,8 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         address uniV2Router,
         address _nodeRewardManagement
     ) ERC20("PENT", "PENT") PaymentSplitter(payees, shares) {
+
+        console.log("here");
 
         nodeRewardManagement = INODERewardManagement(_nodeRewardManagement);
 
@@ -326,9 +330,16 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		
 	}
 
-    function createNodeWithTokens(string memory name, uint256 _type, bool isFusion) public {
+    function createNodeWithTokens(string memory name, uint256 _type) public {
+        _createNodeWithTokens(name, _type, false);
+    }
+
+    function _createNodeWithTokens(string memory name, uint256 _type, bool isFusion) private {
         require(bytes(name).length > 3 && bytes(name).length < 20, "NODE CREATION: NAME SIZE INVALID");
-        
+        if (_type == 4) {
+            require(isFusion, "NODE CREATION: ONLY BE ABLE TO BE MADE BY FUSING");
+        }
+
 		address sender = msg.sender;
 
 	    require(sender != address(0), "NODE CREATION:  creation from the zero address");
@@ -372,6 +383,9 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
             swapping = false;
         }
         super._transfer(sender, address(this), nodePrice);
+        if (isFusion) {
+            super._transfer(address(this), deadWallet, nodePrice);
+        }
         nodeRewardManagement.createNode(sender, name, 0, _type);
     }
 
@@ -483,6 +497,34 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         nodeRewardManagement._cashoutAllNodesReward(sender);
     }
 
+    function cashoutAllInternal(address account) private {
+        address sender = account;
+        require(
+            sender != address(0),
+            "MANIA CSHT:  creation from the zero address"
+        );
+        require(!_isBlacklisted[sender], "MANIA CSHT: Blacklisted address");
+        require(
+            sender != futurUsePool && sender != distributionPool,
+            "MANIA CSHT: futur and rewardsPool cannot cashout rewards"
+        );
+        uint256 rewardAmount = nodeRewardManagement._getRewardAmountOf(sender);
+        require(
+            rewardAmount > 0,
+            "MANIA CSHT: You don't have enough reward to cash out"
+        );
+		
+        uint256 feeAmount = rewardAmount.mul(cashoutFee).div(100);
+		rewardAmount = rewardAmount.sub(feeAmount);
+
+        if (swapLiquify && cashoutFee > 0) {
+			super._transfer(distributionPool, address(this), feeAmount);
+			swapAndSendToFee(futurUsePool, feeAmount);
+        }
+        super._transfer(distributionPool, sender, rewardAmount);
+        nodeRewardManagement._cashoutAllNodesReward(sender);
+    }
+
     function changeSwapLiquify(bool newVal) public onlyOwner {
         swapLiquify = newVal;
     }
@@ -536,6 +578,15 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 
     function getRewardsPerMinute() public view returns (uint256, uint256, uint256) {
         return (nodeRewardManagement.rewardsPerMinuteOne(), nodeRewardManagement.rewardsPerMinuteFive(), nodeRewardManagement.rewardsPerMinuteTen() );
+    }
+
+    function getNodesType() public view returns (string memory) {
+        require(msg.sender != address(0), "SENDER CAN'T BE ZERO");
+        require(
+            nodeRewardManagement._isNodeOwner(msg.sender),
+            "NO NODE OWNER"
+        );
+        return nodeRewardManagement._getNodesType(msg.sender);
     }
 
     function getNodesName() public view returns (string memory) {
@@ -602,7 +653,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 	}
 
     // Fusion Node
-    function toggleFusionMode() public {
+    function toggleFusionMode() public onlyOwner {
         nodeRewardManagement.toggleFusionMode();
     }
 
@@ -615,7 +666,8 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
     }
 
     function fusionNode(uint256 _method, address _account, string memory name) public {
+        // cashoutAllInternal(_account);
         nodeRewardManagement.fusionNode(_method, _account);
-        createNodeWithTokens(name, _method.add(1), true);
+        _createNodeWithTokens(name, _method.add(1), true);
     }
 }
