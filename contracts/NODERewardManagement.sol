@@ -15,7 +15,8 @@ contract NODERewardManagement {
         uint256 rewardsPerMinute;
         string name;
         uint256 nodeType;
-        bool created;
+        uint256 created;
+        uint256 isStake;
     }
 
     mapping(address => NodeEntity[]) private _nodesOfUser;
@@ -34,7 +35,6 @@ contract NODERewardManagement {
     bool public distribution = false;
 
     uint256 public totalNodesCreated = 0;
-    uint256 public totalRewardStaked = 0;
 
 	uint256 public claimInterval = 60;
 
@@ -87,24 +87,34 @@ contract NODERewardManagement {
 		_managers[manager] = true;
 	}
 
-    function createNode(address account, string memory name, uint256 expireTime, uint256 _type) external onlyManager {
+    function createNode(address account, string memory name, uint256 expireTime, uint256 _type, uint256 _isStake) external onlyManager {
 		uint256 realExpireTime = 0;
 		if (expireTime > 0) {
 			realExpireTime = block.timestamp + expireTime;
 		}
         uint256 rewardsPerMinute;
-        if (_type == uint256(1)) {
-            rewardsPerMinute = rewardsPerMinuteOne;
-            lesserNodes[account] = lesserNodes[account].add(1);
-        } else if (_type == uint256(2)) {
-            rewardsPerMinute = rewardsPerMinuteFive;
-            commonNodes[account] = commonNodes[account].add(1);
-        } else if (_type == uint256(3)) {
-            rewardsPerMinute = rewardsPerMinuteTen;
-            legendaryNodes[account] = legendaryNodes[account].add(1);
-        } else if (_type == uint256(4)) {
-            rewardsPerMinute = rewardsPerMinuteOMEGA;
-            omegaOwner[account] = true;
+        if (_isStake == 0) {
+            if (_type == uint256(1)) {
+                rewardsPerMinute = rewardsPerMinuteOne;
+                lesserNodes[account] = lesserNodes[account].add(1);
+            } else if (_type == uint256(2)) {
+                rewardsPerMinute = rewardsPerMinuteFive;
+                commonNodes[account] = commonNodes[account].add(1);
+            } else if (_type == uint256(3)) {
+                rewardsPerMinute = rewardsPerMinuteTen;
+                legendaryNodes[account] = legendaryNodes[account].add(1);
+            } else if (_type == uint256(4)) {
+                rewardsPerMinute = rewardsPerMinuteOMEGA;
+                omegaOwner[account] = true;
+            }
+        } else if (_isStake == 1) {
+            if (_type == uint256(1)) {
+                rewardsPerMinute = rewardsPerMinuteOne;
+            } else if (_type == uint256(2)) {
+                rewardsPerMinute = rewardsPerMinuteFive;
+            } else if (_type == uint256(3)) {
+                rewardsPerMinute = rewardsPerMinuteTen;
+            }
         }
         _nodesOfUser[account].push(
             NodeEntity({
@@ -115,7 +125,8 @@ contract NODERewardManagement {
                 rewardsPerMinute: rewardsPerMinute,
                 name: name,
                 nodeType: _type,
-                created: true
+                created: 1,
+                isStake: _isStake
             })
         );
         totalNodesCreated++;
@@ -129,18 +140,20 @@ contract NODERewardManagement {
 
         NodeEntity memory _node;
 
-        for (uint256 i = 0; i < nodes.length; i++) {
+        uint256 i = 0;
+
+        while(i < _nodesCount[account]) {
 
             _node = nodes[i];
 
-            if (_node.created == true) {
+            if (keccak256(abi.encodePacked(_node.name)) != keccak256(abi.encodePacked(""))) {
+                i++;
                 continue;
             }
 
             _nodesOfUser[account][i] = _nodesOfUser[account][nodes.length - 1];
             delete _nodesOfUser[account][nodes.length - 1];
-            totalNodesCreated--;
-            _nodesCount[account]--;
+            break;
         }
     }
 
@@ -176,7 +189,7 @@ contract NODERewardManagement {
         returns (uint256)
     {
         NodeEntity[] storage nodes = _nodesOfUser[account];
-        uint256 numberOfNodes = nodes.length;
+        uint256 numberOfNodes = _nodesCount[account];
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
@@ -194,7 +207,7 @@ contract NODERewardManagement {
         returns (uint256)
     {
         NodeEntity[] storage nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+        uint256 nodesCount = _nodesCount[account];
         require(nodesCount > 0, "NODE: NO NODE OWNER");
         NodeEntity storage _node;
         uint256 rewardsTotal = 0;
@@ -218,7 +231,7 @@ contract NODERewardManagement {
         uint256 rewardCount = 0;
 
         NodeEntity[] storage nodes = _nodesOfUser[account];
-        nodesCount = nodes.length;
+        nodesCount = _nodesCount[account];
 
 		NodeEntity storage _node;
         for (uint256 i = 0; i < nodesCount; i++) {
@@ -236,7 +249,7 @@ contract NODERewardManagement {
     {
         require(isNodeOwner(account), "GET REWARD OF: NO NODE OWNER");
         NodeEntity[] storage nodes = _nodesOfUser[account];
-        uint256 numberOfNodes = nodes.length;
+        uint256 numberOfNodes = _nodesCount[account];
         require(
             numberOfNodes > 0,
             "CASHOUT ERROR: You don't have nodes to cash-out"
@@ -255,6 +268,48 @@ contract NODERewardManagement {
         return dividendsOwing(node);
     }
 
+    function _getFusionCost() external view returns (uint256, uint256, uint256) {
+        return (
+            nodeCountForLesser,
+            nodeCountForCommon,
+            nodeCountForLegendary
+        );
+    }
+
+    function _getNodeCounts(address account) external view returns (uint256, uint256, uint256, uint256) {
+        return (
+            lesserNodes[account],
+            commonNodes[account],
+            legendaryNodes[account],
+            omegaOwner[account]? 1: 0
+        );
+    }
+
+    function _getNodesInfo(address account)
+        external
+        view
+        returns (string memory)
+    {
+        require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
+        NodeEntity[] memory nodes = _nodesOfUser[account];
+        uint256 nodesCount = _nodesCount[account];
+        NodeEntity memory _node;
+        string memory _info = uint2str(nodes[0].isStake);
+        string memory separator = "#";
+
+        for (uint256 i = 1; i < nodesCount; i++) {
+            _node = nodes[i];
+            _info = string(
+                abi.encodePacked(
+                    _info,
+                    separator,
+                    uint2str(_node.isStake)
+                )
+            );
+        }
+        return _info;
+    }
+
     function _getNodesType(address account)
         external
         view
@@ -262,7 +317,7 @@ contract NODERewardManagement {
     {
         require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
         NodeEntity[] memory nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+        uint256 nodesCount = _nodesCount[account];
         NodeEntity memory _node;
         string memory _types = uint2str(nodes[0].nodeType);
         string memory separator = "#";
@@ -287,7 +342,7 @@ contract NODERewardManagement {
     {
         require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
         NodeEntity[] memory nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+        uint256 nodesCount = _nodesCount[account];
         NodeEntity memory _node;
         string memory _names = nodes[0].name;
         string memory separator = "#";
@@ -313,7 +368,7 @@ contract NODERewardManagement {
     {
         require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
         NodeEntity[] memory nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+        uint256 nodesCount = _nodesCount[account];
         NodeEntity memory _node;
         string memory _expireTimes = uint2str(nodes[0].expireTime);
         string memory separator = "#";
@@ -338,7 +393,7 @@ contract NODERewardManagement {
     {
         require(isNodeOwner(account), "GET CREATIME: NO NODE OWNER");
         NodeEntity[] memory nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+        uint256 nodesCount = _nodesCount[account];
         NodeEntity memory _node;
         string memory _creationTimes = uint2str(nodes[0].creationTime);
         string memory separator = "#";
@@ -364,7 +419,7 @@ contract NODERewardManagement {
     {
         require(isNodeOwner(account), "GET REWARD: NO NODE OWNER");
         NodeEntity[] memory nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+        uint256 nodesCount = _nodesCount[account];
         NodeEntity memory _node;
         string memory _rewardsAvailable = uint2str(dividendsOwing(nodes[0]));
         string memory separator = "#";
@@ -390,7 +445,7 @@ contract NODERewardManagement {
     {
         require(isNodeOwner(account), "LAST CLAIME TIME: NO NODE OWNER");
         NodeEntity[] memory nodes = _nodesOfUser[account];
-        uint256 nodesCount = nodes.length;
+        uint256 nodesCount = _nodesCount[account];
         NodeEntity memory _node;
         string memory _lastClaimTimes = uint2str(nodes[0].lastClaimTime);
         string memory separator = "#";
@@ -445,6 +500,14 @@ contract NODERewardManagement {
 
     function _changeNodeStartAmount(uint256 newStartAmount) external onlyManager {
         nodeStartAmount = newStartAmount;
+    }
+
+    function _getNodePrices() external view returns (uint256, uint256, uint256) {
+        return (
+            nodePriceOne,
+            nodePriceFive,
+            nodePriceTen
+        );
     }
 
     function _changeNodePrice(uint256 newNodePriceOne, uint256 newNodePriceFive, uint256 newNodePriceTen) external onlyManager {
@@ -513,6 +576,14 @@ contract NODERewardManagement {
         taxForLegendary = _taxForLegendary;
     }
 
+    function _getTaxForFusion() external view returns (uint256, uint256, uint256) {
+        return (
+            taxForLesser,
+            taxForCommon,
+            taxForLegendary
+        );
+    }
+
     function fusionNode(uint256 _method, address account) external {
         require(isNodeOwner(account), "Fusion: NO NODE OWNER");
         require(allowFusion, "Fusion: Not Allowed to Fuse");
@@ -522,13 +593,16 @@ contract NODERewardManagement {
         if (_method == 1) {
             require(lesserNodes[account] >= nodeCountForLesser, "Fusion: Not enough Lesser Nodes");
             nodeCountForFusion = nodeCountForLesser;
+            lesserNodes[account] -= nodeCountForFusion;
         } else if (_method == 2) {
             require(commonNodes[account] >= nodeCountForCommon, "Fusion: Not enough Common Nodes");
             nodeCountForFusion = nodeCountForCommon;
+            commonNodes[account] -= nodeCountForFusion;
         } else if (_method == 3) {
             require(legendaryNodes[account] >= nodeCountForLegendary, "Fusion: Not enough Legendary Nodes");
             require(!omegaOwner[account], "Fusion: Already has OMEGA Node");
             nodeCountForFusion = nodeCountForLegendary;
+            legendaryNodes[account] -= nodeCountForFusion;
         }
 
         NodeEntity[] memory nodes = _nodesOfUser[account];
@@ -537,7 +611,9 @@ contract NODERewardManagement {
 
         uint256 count = 0;
 
-        for (uint256 i = 0; i < nodes.length; i++) {
+        uint256 i = 0;
+
+        while(i < _nodesCount[account]) {
 
             if (count == nodeCountForFusion) {
                 break;
@@ -545,13 +621,15 @@ contract NODERewardManagement {
 
             _node = nodes[i];
 
-            if (_node.nodeType != _method) {
+            if (_node.nodeType != _method || _node.isStake == 1) {
+                i++;
                 continue;
             }
 
-            _nodesOfUser[account][i] = _nodesOfUser[account][nodes.length - 1];
-            delete _nodesOfUser[account][nodes.length - 1];
-            i--;
+            if (i != _nodesCount[account] - 1) {
+                _nodesOfUser[account][i] = _nodesOfUser[account][_nodesCount[account] - 1];
+            }
+            delete _nodesOfUser[account][_nodesCount[account] - 1];
             count++;
             _nodesCount[account]--;
             totalNodesCreated--;

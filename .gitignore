@@ -9,3 +9,6 @@ cache
 artifacts
 scripts
 test
+
+arguments-pent.js
+arguments-management.js

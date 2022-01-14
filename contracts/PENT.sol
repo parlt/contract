@@ -21,8 +21,8 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
     IUniswapV2Router02 public uniswapV2Router;
 
     address public uniswapV2Pair;
-    address public futurUsePool;
-    address public distributionPool;
+    address public vault;
+    address public rewardsPool;
 	address public stakingPool = 0x1A4C49cf5d526edaf8955c176ED3cA5531D1270E;
 
     address public deadWallet = 0x000000000000000000000000000000000000dEaD;
@@ -87,8 +87,6 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         address _nodeRewardManagement
     ) ERC20("PENT", "PENT") PaymentSplitter(payees, shares) {
 
-        console.log("here");
-
         nodeRewardManagement = INODERewardManagement(_nodeRewardManagement);
 
         require(uniV2Router != address(0), "ROUTER CANNOT BE ZERO");
@@ -100,27 +98,28 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         uniswapV2Router = _uniswapV2Router;
         uniswapV2Pair = _uniswapV2Pair;
 
-        futurUsePool = addresses[4];
-        distributionPool = addresses[5];
+        vault = addresses[2];
+        rewardsPool = addresses[3];
+        stakingPool = addresses[5];
 
-        require(futurUsePool != address(0) && distributionPool != address(0), "FUTUR & REWARD ADDRESS CANNOT BE ZERO");
+        require(vault != address(0) && rewardsPool != address(0), "VAULT & REWARD CANNOT BE ZERO");
 
         require(
             fees[0] != 0 && fees[1] != 0 && fees[2] != 0 && fees[3] != 0,
             "CONSTR: Fees equal 0"
         );
+
         futurFee = fees[0];
         rewardsFee = fees[1];
         liquidityPoolFee = fees[2];
         cashoutFee = fees[3];
         rwSwap = fees[4];
 
-
 		nodeFees = [8000000000000000000, 7330000000000000000, 6670000000000000000, 6000000000000000000, 5330000000000000000, 4670000000000000000, 4000000000000000000, 3880000000000000000, 3770000000000000000, 3650000000000000000, 3540000000000000000, 3420000000000000000, 3310000000000000000, 3190000000000000000, 3080000000000000000, 2960000000000000000, 2850000000000000000, 2730000000000000000, 2620000000000000000, 2500000000000000000, 2299999999999999700, 2100000000000000000, 1900000000000000000, 1700000000000000000, 1500000000000000000, 1300000000000000000, 1100000000000000100, 900000000000000000, 700000000000000000, 500000000000000000];
         totalFees = rewardsFee.add(liquidityPoolFee).add(futurFee);
 
-        require(addresses.length > 0 && balances.length > 0, "CONSTR: addresses array length must be greater than zero");
-        require(addresses.length == balances.length, "CONSTR: addresses arrays length mismatch");
+        require(addresses.length > 0 && balances.length > 0, "CONSTR: addresses array greater than zero");
+        require(addresses.length == balances.length, "CONSTR: addresses length mismatch");
 
         address[] memory _addresses = addresses; 
         uint256[] memory _balances = balances;
@@ -129,7 +128,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 			_isExcluded[_addresses[i]] = true;
             _mint(_addresses[i], _balances[i] * (10**18));
         }
-        require(totalSupply() == 20456743e18, "CONSTR: totalSupply must equal 20 million");
+        require(totalSupply() == 20456743e18, "CONSTR: totalSupply equal 20 million");
         require(swapAmount > 0, "CONSTR: Swap amount incorrect");
         swapTokensAmount = swapAmount * (10**18);
 		
@@ -149,12 +148,12 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         swapTokensAmount = newVal;
     }
 
-    function updateFuturWall(address payable wall) external onlyOwner {
-        futurUsePool = wall;
+    function updateVaultWall(address payable wall) external onlyOwner {
+        vault = wall;
     }
 
     function updateRewardsWall(address payable wall) external onlyOwner {
-        distributionPool = wall;
+        rewardsPool = wall;
     }
 
 	function updateStakingPool(address payable wall) external onlyOwner {
@@ -216,7 +215,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
     function _setAutomatedMarketMakerPair(address pair, bool value) private {
         require(
             automatedMarketMakerPairs[pair] != value,
-            "TKN: Automated market maker pair is already set to that value"
+            "TKN: Automated market maker pair is already set"
         );
         automatedMarketMakerPairs[pair] = value;
 
@@ -234,9 +233,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
             !_isBlacklisted[from] && !_isBlacklisted[to],
             "Blacklisted address"
         );
-		
-		
-		
+
 		if (from != owner() && to != owner() && from != address(this) && to != address(this) && !_isExcluded[from] && !_isExcluded[to]) {
 			require(amount <= maxTxAmount, "Please transfer under the max transaction amount");
 			if (protectSale && from == uniswapV2Pair) {
@@ -321,8 +318,8 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 	function withdrawStakingPosition(uint256 index) public {
 		address staker = msg.sender;
 		StakePosition storage position = stakePositions[staker][index];
-		require(position.expireTime <= block.timestamp, "You are not eligible to claim this position yet");
-		require(position.balance > 0, "There is nothing to claim from this position");
+		require(position.expireTime <= block.timestamp, "Not eligible to claim this position yet");
+		require(position.balance > 0, "Nothing to claim from this position");
 		
 		uint256 amount = position.balance;
 		position.balance = 0;
@@ -337,16 +334,16 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
     function _createNodeWithTokens(string memory name, uint256 _type, bool isFusion) private {
         require(bytes(name).length > 3 && bytes(name).length < 20, "NODE CREATION: NAME SIZE INVALID");
         if (_type == 4) {
-            require(isFusion, "NODE CREATION: ONLY BE ABLE TO BE MADE BY FUSING");
+            require(isFusion, "NODE CREATION: ONLY ENABLE WHEN FUSING");
         }
 
 		address sender = msg.sender;
 
-	    require(sender != address(0), "NODE CREATION:  creation from the zero address");
+	    require(sender != address(0), "NODE CREATION:  creater the zero address");
        
 	    require(!_isBlacklisted[sender], "NODE CREATION: Blacklisted address");
         
-		require(sender != futurUsePool && sender != distributionPool, "NODE CREATION: futur and rewardsPool cannot create node");
+		require(sender != vault && sender != rewardsPool, "NODE CREATION: vault and rewardsPool cannot create node");
         
 		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type, isFusion);
 		require(balanceOf(sender) >= nodePrice, "NODE CREATION: Balance too low for creation.");
@@ -365,10 +362,10 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
             uint256 rewardsPoolTokens = contractTokenBalance
                 .mul(rewardsFee)
                 .div(100);
-				
+
             super._transfer(
                 address(this),
-                distributionPool,
+                rewardsPool,
                 rewardsPoolTokens
             );
 			
@@ -378,7 +375,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 
             swapAndLiquify(swapTokens);
 
-            swapAndSendToFee(distributionPool, balanceOf(address(this)));
+            swapAndSendToFee(rewardsPool, balanceOf(address(this)));
 
             swapping = false;
         }
@@ -386,28 +383,28 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         if (isFusion) {
             super._transfer(address(this), deadWallet, nodePrice);
         }
-        nodeRewardManagement.createNode(sender, name, 0, _type);
+        nodeRewardManagement.createNode(sender, name, 0, _type, 0);
     }
 
-	function createNodeWithStakePosition(string memory name, uint256 stakeDays, uint256 _type, bool isFusion) public {
+	function createNodeWithStakePosition(string memory name, uint256 stakeDays, uint256 _type) public {
         require(bytes(name).length > 3 && bytes(name).length < 32, "NODE CREATION: NAME SIZE INVALID");
-        
+
 		address sender = msg.sender;
-       
-	    require(sender != address(0), "NODE CREATION:  creation from the zero address");
-       
+
+	    require(sender != address(0), "NODE CREATION:  creater the zero address");
+
 	    require(!_isBlacklisted[sender], "NODE CREATION: Blacklisted address");
-        
-		require(sender != futurUsePool && sender != distributionPool, "NODE CREATION: futur and rewardsPool cannot create node");
+
+		require(sender != vault && sender != rewardsPool, "NODE CREATION: vault and rewardsPool cannot create node");
         require(stakeDays >= 1 && stakeDays <= 30, "Stake time must be between 1 and 30 days");
-		
+
 		uint256 duration = stakeDays * 1 days;
 		uint256 nodeFee = nodeFees[stakeDays - 1];
-		
-		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type, isFusion);
+
+		uint256 nodePrice = nodeRewardManagement.getNodePrice(_type, false);
 		require(balanceOf(sender) >= nodePrice + nodeFee, "NODE CREATION: Balance too low for creation.");
         uint256 contractTokenBalance = balanceOf(address(this));
-		
+
         bool swapAmountOk = contractTokenBalance >= swapTokensAmount;
 
         if (
@@ -422,27 +419,28 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
             uint256 rewardsPoolTokens = contractTokenBalance
                 .mul(rewardsFee)
                 .div(100);
-				
+
             super._transfer(
                 address(this),
-                distributionPool,
+                rewardsPool,
                 rewardsPoolTokens
             );
-			
+
             uint256 swapTokens = contractTokenBalance.mul(liquidityPoolFee).div(
                 100
             );
 
             swapAndLiquify(swapTokens);
 
-            swapAndSendToFee(distributionPool, balanceOf(address(this)));
+            swapAndSendToFee(rewardsPool, balanceOf(address(this)));
 
             swapping = false;
         }
 		
-        super._transfer(sender, address(this), nodePrice + nodeFee);
+        super._transfer(sender, address(this), nodeFee);
+        super._transfer(sender, address(stakingPool), nodePrice);
 		createStakePosition(nodePrice, duration);
-        nodeRewardManagement.createNode(sender, name, duration, _type);
+        nodeRewardManagement.createNode(sender, name, duration, _type, 1);
     }
 
     function cashoutReward(uint256 blocktime) public {
@@ -450,8 +448,8 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         require(sender != address(0), "CSHT:  creation from the zero address");
         require(!_isBlacklisted[sender], "MANIA CSHT: Blacklisted address");
         require(
-            sender != futurUsePool && sender != distributionPool,
-            "CSHT: futur and rewardsPool cannot cashout rewards"
+            sender != vault && sender != rewardsPool,
+            "CSHT: vault and rewardsPool cannot cashout rewards"
         );
         uint256 rewardAmount = nodeRewardManagement._getRewardAmountOf( sender, blocktime );
         require(
@@ -462,51 +460,28 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		uint256 feeAmount = rewardAmount.mul(cashoutFee).div(100);
 		rewardAmount = rewardAmount.sub(feeAmount);
         if (swapLiquify && cashoutFee > 0) {
-			super._transfer(distributionPool, address(this), feeAmount);
-			swapAndSendToFee(futurUsePool, feeAmount);
+			super._transfer(rewardsPool, address(this), feeAmount);
+			swapAndSendToFee(vault, feeAmount);
         }
-        super._transfer(distributionPool, sender, rewardAmount);
+        super._transfer(rewardsPool, sender, rewardAmount);
         nodeRewardManagement._cashoutNodeReward(sender, blocktime);
     }
 
     function cashoutAll() public {
         address sender = msg.sender;
-        require(
-            sender != address(0),
-            "MANIA CSHT:  creation from the zero address"
-        );
-        require(!_isBlacklisted[sender], "MANIA CSHT: Blacklisted address");
-        require(
-            sender != futurUsePool && sender != distributionPool,
-            "MANIA CSHT: futur and rewardsPool cannot cashout rewards"
-        );
-        uint256 rewardAmount = nodeRewardManagement._getRewardAmountOf(sender);
-        require(
-            rewardAmount > 0,
-            "MANIA CSHT: You don't have enough reward to cash out"
-        );
-		
-        uint256 feeAmount = rewardAmount.mul(cashoutFee).div(100);
-		rewardAmount = rewardAmount.sub(feeAmount);
-
-        if (swapLiquify && cashoutFee > 0) {
-			super._transfer(distributionPool, address(this), feeAmount);
-			swapAndSendToFee(futurUsePool, feeAmount);
-        }
-        super._transfer(distributionPool, sender, rewardAmount);
-        nodeRewardManagement._cashoutAllNodesReward(sender);
+        cashoutAllInternal(sender);
     }
 
-    function cashoutAllInternal(address account) private {
-        address sender = account;
+    function cashoutAllInternal(address _account) private {
+        address sender = _account;
         require(
             sender != address(0),
-            "MANIA CSHT:  creation from the zero address"
+            "MANIA CSHT:  creater the zero address"
         );
         require(!_isBlacklisted[sender], "MANIA CSHT: Blacklisted address");
         require(
-            sender != futurUsePool && sender != distributionPool,
-            "MANIA CSHT: futur and rewardsPool cannot cashout rewards"
+            sender != vault && sender != rewardsPool,
+            "MANIA CSHT: vault and rewardsPool cannot cashout rewards"
         );
         uint256 rewardAmount = nodeRewardManagement._getRewardAmountOf(sender);
         require(
@@ -518,10 +493,10 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		rewardAmount = rewardAmount.sub(feeAmount);
 
         if (swapLiquify && cashoutFee > 0) {
-			super._transfer(distributionPool, address(this), feeAmount);
-			swapAndSendToFee(futurUsePool, feeAmount);
+			super._transfer(rewardsPool, address(this), feeAmount);
+			swapAndSendToFee(vault, feeAmount);
         }
-        super._transfer(distributionPool, sender, rewardAmount);
+        super._transfer(rewardsPool, sender, rewardAmount);
         nodeRewardManagement._cashoutAllNodesReward(sender);
     }
 
@@ -560,8 +535,20 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         nodeRewardManagement._changeNodePrice(newNodePriceOne, newNodePriceFive, newNodePriceTen);
     }
 
+    function getFusionCost() public view returns(uint256, uint256, uint256) {
+        return nodeRewardManagement._getFusionCost();
+    }
+
+    function getNodePrices() public view returns (uint256, uint256, uint256) {
+        return nodeRewardManagement._getNodePrices();
+    } 
+
     function getNodePrice(uint256 _type, bool isFusion) public view returns (uint256) {
         return nodeRewardManagement.getNodePrice(_type, isFusion);
+    }
+
+    function getTaxForFusion() public view returns (uint256, uint256, uint256) {
+        return nodeRewardManagement._getTaxForFusion();
     }
 
     function changeClaimInterval(uint256 newInterval) public onlyOwner {
@@ -578,6 +565,24 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 
     function getRewardsPerMinute() public view returns (uint256, uint256, uint256) {
         return (nodeRewardManagement.rewardsPerMinuteOne(), nodeRewardManagement.rewardsPerMinuteFive(), nodeRewardManagement.rewardsPerMinuteTen() );
+    }
+
+    function getNodeCounts() public view returns (uint256, uint256, uint256, uint256) {
+        require(msg.sender != address(0), "SENDER CAN'T BE ZERO");
+        require(
+            nodeRewardManagement._isNodeOwner(msg.sender),
+            "NO NODE OWNER"
+        );
+        return nodeRewardManagement._getNodeCounts(msg.sender);
+    }
+
+    function getNodesInfo () public view returns (string memory) {
+        require(msg.sender != address(0), "SENDER CAN'T BE ZERO");
+        require(
+            nodeRewardManagement._isNodeOwner(msg.sender),
+            "NO NODE OWNER"
+        );
+        return nodeRewardManagement._getNodesInfo(msg.sender);
     }
 
     function getNodesType() public view returns (string memory) {
@@ -634,10 +639,6 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         return nodeRewardManagement._getNodesLastClaimTime(msg.sender);
     }
 
-    function getTotalRewardStaked() public view returns (uint256) {
-        return nodeRewardManagement.totalRewardStaked();
-    }
-
     function getTotalNodesCreated() public view returns (uint256) {
         return nodeRewardManagement.totalNodesCreated();
     }
@@ -665,9 +666,10 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         nodeRewardManagement.setTaxForFusion(_taxForLesser, _taxForCommon, _taxForLegendary);
     }
 
-    function fusionNode(uint256 _method, address _account, string memory name) public {
-        // cashoutAllInternal(_account);
-        nodeRewardManagement.fusionNode(_method, _account);
+    function fusionNode(uint256 _method, string memory name) public {
+        address sender = msg.sender;
+        cashoutAllInternal(sender);
+        nodeRewardManagement.fusionNode(_method, sender);
         _createNodeWithTokens(name, _method.add(1), true);
     }
 }

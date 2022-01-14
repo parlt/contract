@@ -8,7 +8,7 @@ pragma solidity ^0.8.0;
 interface INODERewardManagement {
     function getNodePrice(uint256 _type, bool isFusion) external view returns (uint256);
 
-    function createNode(address account, string memory name, uint256 expireTime, uint256 _type) external;
+    function createNode(address account, string memory name, uint256 expireTime, uint256 _type, uint256 isStake) external;
     
     function _getRewardAmountOf(address account) external view returns (uint256);
 
@@ -36,7 +36,17 @@ interface INODERewardManagement {
 
     function rewardsPerMinuteTen() external view returns (uint256);
 
+    function _getFusionCost() external view returns (uint256, uint256, uint256);
+
+    function _getNodePrices() external view returns (uint256, uint256, uint256);
+
+    function _getNodeCounts(address account) external view returns (uint256, uint256, uint256, uint256);
+
+    function _getTaxForFusion() external view returns (uint256, uint256, uint256);
+
     function _getNodesType(address account) external view returns (string memory);
+
+    function _getNodesInfo(address account) external view returns (string memory);
 
     function _getNodesName(address account) external view returns (string memory);
 
@@ -47,8 +57,6 @@ interface INODERewardManagement {
     function _getNodesRewardAvailable(address account) external view returns (string memory);
 
     function _getNodesLastClaimTime(address account) external view returns (string memory);
-
-    function totalRewardStaked() external view returns (uint256);
 
     function totalNodesCreated() external view returns (uint256);
 

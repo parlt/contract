@@ -36,6 +36,8 @@
     "compile": "npx hardhat compile --force",
     "deploy-s:ropsten": "npx hardhat run scripts/deployAll.ts --network ropsten",
     "deploy:localhost": "npx hardhat run scripts/deployAll.ts --network localhost",
-    "deploy:mumbai": "npx hardhat run scripts/deployAll.ts --network mumbai"
+    "deploy:mumbai": "npx hardhat run scripts/deployAll.ts --network mumbai",
+    "verify:mumbai:management": "npx hardhat verify --constructor-args arguments-management.js \"0x441c8dA64F389207DD7544DAc3ff64be23ea76A6\" --network mumbai",
+    "verify:mumbai:pent": "npx hardhat verify --constructor-args arguments-pent.js \"0x185352fa7de58e62Ed7F9514E031AD3659d036aC\" --network mumbai"
   }
 }
