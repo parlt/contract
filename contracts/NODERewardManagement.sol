@@ -39,7 +39,7 @@ contract NODERewardManagement {
 	uint256 public claimInterval = 60;
 
 	uint256 public stakeNodeStartAmount = 0 * 10 ** 18;
-	uint256 public nodeStartAmount = 1 * 10 ** 18;
+	uint256 public nodeStartAmount = 0 * 10 ** 18;
 
 	event NodeCreated(address indexed from, string name, uint256 index, uint256 totalNodesCreated, uint256 _type);
 
@@ -52,6 +52,8 @@ contract NODERewardManagement {
     uint256 public nodeCountForLesser = 5;
     uint256 public nodeCountForCommon = 2;
     uint256 public nodeCountForLegendary = 10;
+
+    uint256 public maxLimit = 100;
 
     uint256 public taxForLesser;
     uint256 public taxForCommon;
@@ -88,6 +90,7 @@ contract NODERewardManagement {
 	}
 
     function createNode(address account, string memory name, uint256 expireTime, uint256 _type, uint256 _isStake) external onlyManager {
+        require(_nodesCount[account] <= maxLimit, "Can't create nodes over 100");
 		uint256 realExpireTime = 0;
 		if (expireTime > 0) {
 			realExpireTime = block.timestamp + expireTime;
@@ -564,6 +567,10 @@ contract NODERewardManagement {
         allowFusion = !allowFusion;
     }
 
+    function setMaxLimit(uint256 newValue) external onlyManager {
+        maxLimit = newValue;
+    }
+
     function setNodeCountForFusion(uint256 _nodeCountForLesser, uint256 _nodeCountForCommon, uint256 _nodeCountForLegendary) external onlyManager {
         nodeCountForLesser = _nodeCountForLesser;
         nodeCountForCommon = _nodeCountForCommon;
@@ -605,8 +612,6 @@ contract NODERewardManagement {
             legendaryNodes[account] -= nodeCountForFusion;
         }
 
-        NodeEntity[] memory nodes = _nodesOfUser[account];
-
         NodeEntity memory _node;
 
         uint256 count = 0;
@@ -619,20 +624,23 @@ contract NODERewardManagement {
                 break;
             }
 
+            NodeEntity[] memory nodes = _nodesOfUser[account];
+
             _node = nodes[i];
 
-            if (_node.nodeType != _method || _node.isStake == 1) {
+            // if (_node.nodeType == _method && _node.isStake == 0) {
+            if (_node.nodeType == _method && _node.isStake == 0) {
+                if (i != _nodesCount[account] - 1) {
+                    _nodesOfUser[account][i] = _nodesOfUser[account][_nodesCount[account] - 1];
+                }
+                delete _nodesOfUser[account][_nodesCount[account] - 1];
+                count++;
+                _nodesCount[account]--;
+                totalNodesCreated--;
+            } else {
                 i++;
                 continue;
             }
-
-            if (i != _nodesCount[account] - 1) {
-                _nodesOfUser[account][i] = _nodesOfUser[account][_nodesCount[account] - 1];
-            }
-            delete _nodesOfUser[account][_nodesCount[account] - 1];
-            count++;
-            _nodesCount[account]--;
-            totalNodesCreated--;
         }
     }
 }
