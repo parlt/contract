@@ -68,4 +68,7 @@ interface INODERewardManagement {
     function setTaxForFusion(uint256 _taxForLesser, uint256 _taxForCommon, uint256 _taxForLegendary) external;
 
     function fusionNode(uint256 _method, address _account) external;
+
+    // migrate
+    function migrateNode(address _account, string memory _name, uint256 _creationTime, uint256 _lastClaimTime, uint256 _expireTime, uint256 _type, uint256 _isStake) external;
 }
