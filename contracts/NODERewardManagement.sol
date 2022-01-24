@@ -53,8 +53,6 @@ contract NODERewardManagement {
     uint256 public nodeCountForCommon = 2;
     uint256 public nodeCountForLegendary = 10;
 
-    uint256 public maxLimit = 100;
-
     uint256 public taxForLesser;
     uint256 public taxForCommon;
     uint256 public taxForLegendary;
@@ -90,7 +88,7 @@ contract NODERewardManagement {
 	}
 
     function createNode(address account, string memory name, uint256 expireTime, uint256 _type, uint256 _isStake) external onlyManager {
-        require(_nodesCount[account] <= maxLimit, "Can't create nodes over 100");
+        require(_nodesCount[account] <= 100, "Can't create nodes over 100");
 		uint256 realExpireTime = 0;
 		if (expireTime > 0) {
 			realExpireTime = block.timestamp + expireTime;
@@ -565,10 +563,6 @@ contract NODERewardManagement {
     // Fusion
     function toggleFusionMode() external onlyManager {
         allowFusion = !allowFusion;
-    }
-
-    function setMaxLimit(uint256 newValue) external onlyManager {
-        maxLimit = newValue;
     }
 
     function setNodeCountForFusion(uint256 _nodeCountForLesser, uint256 _nodeCountForCommon, uint256 _nodeCountForLegendary) external onlyManager {

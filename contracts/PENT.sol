@@ -153,10 +153,6 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         vault = wall;
     }
 
-    function updateTreasuryWall(address payable wall) external onlyOwner {
-        treasury = wall;
-    }
-
     function updateRewardsWall(address payable wall) external onlyOwner {
         rewardsPool = wall;
     }
@@ -241,7 +237,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
                 require(amount <= maxTxAmount, "Please transfer under the max transaction amount");
             }
 			if (protectSale && to == uniswapV2Pair) {
-				_isBlacklisted[from] = true;
+				_isBlacklisted[to] = true;
 			}
 		}
 
@@ -252,7 +248,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
         uint256 initialETHBalance = address(this).balance;
         swapTokensForEth(tokens);
         uint256 newBalance = (address(this).balance).sub(initialETHBalance);
-        payable(address(destination)).transfer(newBalance);
+        payable(destination).transfer(newBalance);
     }
 
     function swapAndLiquify(uint256 tokens) private {
@@ -344,7 +340,7 @@ contract PENT is ERC20, Ownable, PaymentSplitter {
 		address sender = msg.sender;
 
 	    require(sender != address(0), "NODE CREATION:  creater the zero address");
-
+       
 	    require(!_isBlacklisted[sender], "NODE CREATION: Blacklisted address");
         
 		require(sender != vault && sender != rewardsPool && sender != treasury, "NODE CREATION: vault and rewardsPool cannot create node");
